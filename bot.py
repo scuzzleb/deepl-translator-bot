@@ -1,29 +1,35 @@
 import logging
+import os
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
-# === Настройки ===
-TELEGRAM_BOT_TOKEN = "7604760601:AAELL1UilnhovMnjJdskoC1Qhx35FtKN-zI"
-DEEPL_API_KEY = "354a537f-a56a-44c8-88f1-0b19cb13917b:fx"
+# === Получаем токены из переменных окружения ===
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+DEEPL_API_KEY = os.getenv("DEEPL_API_KEY")
 
+# === Проверка: если токены не заданы — остановить запуск
+if not TELEGRAM_BOT_TOKEN or not DEEPL_API_KEY:
+    raise ValueError("❗️ TELEGRAM_BOT_TOKEN и DEEPL_API_KEY должны быть заданы в переменных окружения.")
+
+# === Логирование
 logging.basicConfig(level=logging.INFO)
 
-# === Определение языка (англ ⇄ японский) ===
+# === Язык: определение направления перевода
 def detect_target_lang(text):
     for ch in text:
         if '\u3040' <= ch <= '\u30ff' or '\u4e00' <= ch <= '\u9faf':
             return "EN"  # если японский — переводим на английский
     return "JA"  # иначе — на японский
 
-# === Очистка и подготовка текста ===
+# === Подготовка текста
 def preprocess_text(text):
     text = " ".join(text.strip().split())  # убираем лишние пробелы
     if not text.endswith((".", "!", "?", "。", "！", "？")):
-        text += "."  # добавляем точку, чтобы DeepL не считал текст незавершённым
+        text += "."
     return text
 
-# === Перевод через DeepL ===
+# === Перевод через DeepL
 def translate_with_deepl(text: str) -> str:
     text = preprocess_text(text)
     target_lang = detect_target_lang(text)
@@ -33,9 +39,9 @@ def translate_with_deepl(text: str) -> str:
         "auth_key": DEEPL_API_KEY,
         "text": text,
         "target_lang": target_lang,
-        "split_sentences": "0",            # переводить весь текст как одно целое
-        "preserve_formatting": "1",        # сохранить формат
-        "formality": "more"                # более официальный/дословный перевод
+        "split_sentences": "0",
+        "preserve_formatting": "1",
+        "formality": "more"
     }
 
     response = requests.post(url, data=params)
@@ -44,7 +50,7 @@ def translate_with_deepl(text: str) -> str:
     else:
         return f"[Ошибка перевода: {response.text}]"
 
-# === Обработка всех текстовых сообщений ===
+# === Обработка входящих сообщений
 async def handle_all_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
     if not message or not message.text:
@@ -57,9 +63,9 @@ async def handle_all_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     translation = translate_with_deepl(text)
     await message.reply_text(translation)
 
-# === Запуск бота ===
+# === Запуск бота
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT, handle_all_text))
-    print("🤖 Бот запущен с режимом дословного перевода (DeepL)")
+    print("🤖 Бот запущен с переменными окружения и дословным переводом")
     app.run_polling()
